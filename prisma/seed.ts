@@ -1,26 +1,13 @@
 import { prisma } from "../src/config/prisma";
-import { UserType, AnimalSpecies, ReportStatus } from "@prisma/client";
+import { UserType, ReportStatus } from "@prisma/client";
 import bcrypt from "bcrypt";
 
 async function main() {
   // Limpar dados existentes
   await prisma.midia.deleteMany();
-  await prisma.animalsCharacteristics.deleteMany();
-  await prisma.animal.deleteMany();
   await prisma.report.deleteMany();
   await prisma.notification.deleteMany();
-  await prisma.characteristic.deleteMany();
   await prisma.user.deleteMany();
-
-  // Criar características
-  const characteristics = await Promise.all([
-    prisma.characteristic.create({ data: { description: "Carinhoso" } }),
-    prisma.characteristic.create({ data: { description: "Brincalhão" } }),
-    prisma.characteristic.create({ data: { description: "Calmo" } }),
-    prisma.characteristic.create({ data: { description: "Energético" } }),
-    prisma.characteristic.create({ data: { description: "Amigável" } }),
-    prisma.characteristic.create({ data: { description: "Tímido" } }),
-  ]);
 
   // Criar usuários
   const hashedPassword = await bcrypt.hash("123456", 10);
@@ -57,110 +44,6 @@ async function main() {
       type: UserType.ONG,
     },
   });
-
-  // Criar animais
-  const animals = await Promise.all([
-    prisma.animal.create({
-      data: {
-        name: "Rex",
-        age: 3,
-        species: AnimalSpecies.DOG,
-        breed: "Vira-lata",
-        description: "Um cão muito amigável e cheio de energia",
-        responsibleNGOId: ong1.id,
-        characteristics: {
-          create: [
-            { characteristicId: characteristics[0].id }, // Carinhoso
-            { characteristicId: characteristics[1].id }, // Brincalhão
-          ],
-        },
-        midia: {
-          create: [
-            {
-              type: "image",
-              extension: "jpg",
-              url: "/images/rex1.jpg",
-            },
-          ],
-        },
-      },
-    }),
-    prisma.animal.create({
-      data: {
-        name: "Mia",
-        age: 2,
-        species: AnimalSpecies.CAT,
-        breed: "Siamês",
-        description: "Gata calma e carinhosa, adora dormir no sofá",
-        responsibleNGOId: ong1.id,
-        characteristics: {
-          create: [
-            { characteristicId: characteristics[0].id }, // Carinhoso
-            { characteristicId: characteristics[2].id }, // Calmo
-          ],
-        },
-        midia: {
-          create: [
-            {
-              type: "image",
-              extension: "jpg",
-              url: "/images/mia1.jpg",
-            },
-          ],
-        },
-      },
-    }),
-    prisma.animal.create({
-      data: {
-        name: "Thor",
-        age: 4,
-        species: AnimalSpecies.DOG,
-        breed: "Husky",
-        description: "Cão energético que precisa de muito exercício",
-        responsibleNGOId: ong2.id,
-        characteristics: {
-          create: [
-            { characteristicId: characteristics[1].id }, // Brincalhão
-            { characteristicId: characteristics[3].id }, // Energético
-          ],
-        },
-        midia: {
-          create: [
-            {
-              type: "image",
-              extension: "jpg",
-              url: "/images/thor1.jpg",
-            },
-          ],
-        },
-      },
-    }),
-    prisma.animal.create({
-      data: {
-        name: "Luna",
-        age: 1,
-        species: AnimalSpecies.CAT,
-        breed: "Persa",
-        description: "Gatinha tímida mas muito doce",
-        responsibleNGOId: ong2.id,
-        characteristics: {
-          create: [
-            { characteristicId: characteristics[4].id }, // Amigável
-            { characteristicId: characteristics[5].id }, // Tímido
-          ],
-        },
-        midia: {
-          create: [
-            {
-              type: "image",
-              extension: "jpg",
-              url: "/images/luna1.jpg",
-            },
-          ],
-        },
-      },
-    }),
-  ]);
 
   // Criar denúncias
   const reports = await Promise.all([
@@ -264,19 +147,11 @@ async function main() {
         userId: user.id,
       },
     }),
-    prisma.notification.create({
-      data: {
-        message: "Animal disponível para adoção próximo de você",
-        userId: user.id,
-      },
-    }),
   ]);
 
   console.log("Seed criado com sucesso!");
   console.log(`Usuários: 3`);
-  console.log(`Animais: ${animals.length}`);
   console.log(`Denúncias: ${reports.length}`);
-  console.log(`Características: ${characteristics.length}`);
 }
 
 main()
