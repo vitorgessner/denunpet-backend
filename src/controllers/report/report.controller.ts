@@ -16,6 +16,8 @@ const reportSchema = z.object({
     details: z.string().min(1),
     ocurrenceDate: z.string().transform((string) => new Date(string)),
     location: z.string().min(1),
+    address: z.string().nullable(),
+    anonymous: z.string(),
     user: userSchema.optional()
 })
 
@@ -29,14 +31,14 @@ export async function register(req: Request, res: Response) {
         url: `/images/${file.filename}`,
     }))
 
-
     const data: Prisma.ReportCreateInput = {
         description: parsed.description,
         details: parsed.details,
         location: parsed.location,
+        address: parsed.address,
         ocurrenceDate: parsed.ocurrenceDate,
         status: ReportStatus.PENDING,
-        user: parsed.user ? { connect: { id: parsed.user.id } } : undefined,
+        user: parsed.anonymous === 'true' ? undefined : parsed.user ? { connect: { id: parsed.user.id } } : undefined,
         midia: {
             create: midiaData.map(file => ({
                 type: file.type,
@@ -86,6 +88,15 @@ export async function sendReportToReview(req: Request, res: Response) {
     return res.status(200).send();
 }
 
+export async function rejectReport(req: Request, res: Response) {
+    const userId = +(req as any).user.sub;
+    const reportId = +req.params.id;
+    const reason = req.body.reason;
+
+    await reportServices.rejectReport(reportId, userId, reason);
+    return res.status(200).send();
+}
+
 export async function edit(req: Request, res: Response) {
     const parsed = reportSchema.parse({ ...req.body, user: req.body.user ? JSON.parse(req.body.user) : undefined })
     const files = req.files as Express.Multer.File[]
@@ -94,7 +105,7 @@ export async function edit(req: Request, res: Response) {
 
     const exists = await reportServices.findById(Number(id))
     if (!exists) return res.status(404).json({ code: "NOT_FOUND " })
-    if (exists.status !== ReportStatus.PENDING) return res.status(403).json({ code: "FORBIDDEN" })
+    if (exists.status !== ReportStatus.PENDING && exists.status !== ReportStatus.REJECTED) return res.status(403).json({ code: "FORBIDDEN" })
 
 
     const midiaData = files.map((file) => ({
@@ -116,6 +127,7 @@ export async function edit(req: Request, res: Response) {
 
             }))
         },
+        status: 'PENDING'
     }
 
     const report = await reportServices.edit(Number(id), data)
@@ -150,7 +162,7 @@ export async function getReportById(req: Request, res: Response) {
 
 export async function updateReportStatus(req: Request, res: Response) {
     const id = Number(req.params.id);
-    const { status } = req.body;
+    const { status, statusComment } = req.body;
     
     if (!Object.values(ReportStatus).includes(status)) {
         return res.status(400).json({ code: "INVALID_STATUS" });
@@ -159,7 +171,7 @@ export async function updateReportStatus(req: Request, res: Response) {
     const report = await reportServices.findById(id);
     if (!report) return res.status(404).json({ code: "NOT_FOUND" });
     
-    const updatedReport = await reportServices.edit(id, { status });
+    const updatedReport = await reportServices.edit(id, { status, statusComment });
     
     if (!updatedReport) return res.status(500).json({ code: "INTERNAL_ERROR" });
     

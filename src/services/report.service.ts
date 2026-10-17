@@ -29,7 +29,21 @@ async function sendReportToReview(id: number, ngoUserId: number) {
 
     await reportRepository.edit(report.id, {
         status: ReportStatus.UNDER_REVIEW,
-        ngo: { connect: { id: ngoUserId } }
+        ngo: { connect: { id: ngoUserId } },
+        rejectReason: null,
+    });
+
+    return;
+}
+
+async function rejectReport(id: number, ngoUserId: number, reason: string) {
+    const report = await reportRepository.findById(id);
+    if (!report) throw new AppError("REPORT_NOT_FOUND", 404);
+    if (report.status != ReportStatus.PENDING) throw new AppError("REPORT_STATUS_NEED_BE_PENDING");
+
+    await reportRepository.edit(report.id, {
+        status: ReportStatus.REJECTED,
+        rejectReason: reason,
     });
 
     return;
@@ -108,6 +122,7 @@ export const reportServices = {
     register,
     getPendingReports,
     sendReportToReview,
+    rejectReport,
     findByUser,
     findById,
     edit,

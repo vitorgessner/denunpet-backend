@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { edit, exclude, getMyReports, getPendingReports, register, sendReportToReview, getReportById, updateReportStatus } from '../controllers/report/report.controller';
+import { edit, exclude, getMyReports, getPendingReports, register, sendReportToReview, getReportById, updateReportStatus, rejectReport } from '../controllers/report/report.controller';
 import { upload } from '../middlewares/multer';
 import { authenticated } from '../middlewares/authenticated';
 import { UserType } from '@prisma/client';
@@ -13,7 +13,8 @@ router.post("/register", upload.array("midia", 10), register)
 router.get('/:id', authenticated(), getReportById);
 router.put("/:id", upload.array("midia", 10), authenticated(UserType.USER), edit)
 router.put("/:id/send-to-review", authenticated(UserType.ONG), sendReportToReview);
+router.put("/:id/reject", authenticated(UserType.ONG), rejectReport)
 router.put("/:id/status", authenticated(UserType.ONG), updateReportStatus);
 router.delete("/:id", authenticated(UserType.USER), exclude)
-
+    
 export default router;
