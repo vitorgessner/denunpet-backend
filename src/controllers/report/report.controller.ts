@@ -17,6 +17,7 @@ const reportSchema = z.object({
     ocurrenceDate: z.string().transform((string) => new Date(string)),
     location: z.string().min(1),
     address: z.string().nullable(),
+    houseNumber: z.string().optional(),
     anonymous: z.string(),
     user: userSchema.optional()
 })
@@ -36,6 +37,7 @@ export async function register(req: Request, res: Response) {
         details: parsed.details,
         location: parsed.location,
         address: parsed.address,
+        houseNumber: parsed.houseNumber || null,
         ocurrenceDate: parsed.ocurrenceDate,
         status: ReportStatus.PENDING,
         user: parsed.anonymous === 'true' ? undefined : parsed.user ? { connect: { id: parsed.user.id } } : undefined,
@@ -118,6 +120,7 @@ export async function edit(req: Request, res: Response) {
         description: parsed.description,
         details: parsed.details,
         location: parsed.location,
+        houseNumber: parsed.houseNumber || null,
         ocurrenceDate: parsed.ocurrenceDate,
         midia: {
             create: midiaData.map(file => ({
