@@ -49,6 +49,40 @@ async function rejectReport(id: number, ngoUserId: number, reason: string) {
     return;
 }
 
+async function addNgoMidia(id: number, ngoUserId: number, files: Express.Multer.File[]) {
+    const report = await reportRepository.findById(id);
+
+    let error: AppError | null = null;
+    if (!report) error = new AppError("REPORT_NOT_FOUND", 404);
+    else if (report.ngoId !== ngoUserId) error = new AppError("FORBIDDEN", 403);
+    else if (report.status !== ReportStatus.UNDER_REVIEW && report.status !== ReportStatus.IN_PROGRESS)
+        error = new AppError("REPORT_STATUS_NEED_BE_UNDER_REVIEW_OR_IN_PROGRESS");
+    else if (!files.length) error = new AppError("NO_FILES", 400);
+
+    if (error) {
+        // Remove os arquivos que o multer já salvou em disco
+        files.forEach(file => {
+            try {
+                if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
+            } catch (err) {
+                console.error("Erro ao deletar arquivo:", file.path, err);
+            }
+        });
+        throw error;
+    }
+
+    return reportRepository.edit(report!.id, {
+        midia: {
+            create: files.map((file) => ({
+                type: "image",
+                extension: file.originalname.split(".").pop()!,
+                url: `/images/${file.filename}`,
+                addedByNgo: true,
+            }))
+        }
+    });
+}
+
 async function findByUser(id: number, userType: UserType, filters: {
     status?: string;
     search?: string;
@@ -123,6 +157,7 @@ export const reportServices = {
     getPendingReports,
     sendReportToReview,
     rejectReport,
+    addNgoMidia,
     findByUser,
     findById,
     edit,

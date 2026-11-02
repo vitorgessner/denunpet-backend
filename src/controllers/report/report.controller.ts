@@ -99,6 +99,15 @@ export async function rejectReport(req: Request, res: Response) {
     return res.status(200).send();
 }
 
+export async function addNgoMidia(req: Request, res: Response) {
+    const userId = +(req as any).user.sub;
+    const reportId = +req.params.id;
+    const files = (req.files as Express.Multer.File[]) ?? [];
+
+    const report = await reportServices.addNgoMidia(reportId, userId, files);
+    return res.status(201).json(report);
+}
+
 export async function edit(req: Request, res: Response) {
     const parsed = reportSchema.parse({ ...req.body, user: req.body.user ? JSON.parse(req.body.user) : undefined })
     const files = req.files as Express.Multer.File[]
