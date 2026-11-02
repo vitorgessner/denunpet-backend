@@ -1,4 +1,4 @@
-import { Prisma, ReportStatus, UserType } from "@prisma/client";
+import { Midia, Prisma, ReportStatus, UserType } from "@prisma/client";
 import { reportRepository } from "../repositories/report.repository";
 import path from 'path';
 import fs from 'fs'
@@ -131,19 +131,28 @@ async function edit(id: number, data: Prisma.ReportUpdateInput) {
 }
 
 
+// Mídias da denúncia que o denunciante pode remover (as adicionadas pela ONG ficam)
+async function findRemovableMidia(reportId: number, ids: number[]): Promise<Midia[]> {
+    if (!ids.length) return []
+    const midia = await reportRepository.findReportMidia(reportId)
+    return midia.filter(item => ids.includes(item.id) && !item.addedByNgo)
+}
+
+function deleteMidiaFiles(midia: Midia[]) {
+    midia.forEach(item => {
+        const midiaPath = path.join(process.cwd(), "public", item.url.replace(/^\//, ""));
+        try {
+            if (fs.existsSync(midiaPath)) fs.unlinkSync(midiaPath);
+        } catch (err) {
+            console.error("Erro ao deletar arquivo:", midiaPath, err);
+        }
+    });
+}
+
 async function exclude(id: number) {
     const midia = await reportRepository.findReportMidia(id)
 
-    if (midia && Array.isArray(midia)) {
-        midia.forEach(item => {
-            const midiaPath = path.join(process.cwd(), "public", item.url.replace(/^\//, ""));
-            try {
-                if (fs.existsSync(midiaPath)) fs.unlinkSync(midiaPath);
-            } catch (err) {
-                console.error("Erro ao deletar arquivo:", midiaPath, err);
-            }
-        });
-    }
+    if (midia && Array.isArray(midia)) deleteMidiaFiles(midia)
 
     const exclude = await reportRepository.deleteById(id)
     if (!exclude) return false
@@ -161,5 +170,7 @@ export const reportServices = {
     findByUser,
     findById,
     edit,
+    findRemovableMidia,
+    deleteMidiaFiles,
     exclude
 }

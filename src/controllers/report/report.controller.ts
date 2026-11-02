@@ -22,6 +22,14 @@ const reportSchema = z.object({
     user: userSchema.optional()
 })
 
+// Na edição o campo anonymous não é usado; removedMidia é um JSON com os ids das mídias a remover
+const editReportSchema = reportSchema.extend({
+    anonymous: z.string().optional(),
+    removedMidia: z.string().optional()
+        .transform((string) => string ? JSON.parse(string) : [])
+        .pipe(z.array(z.number()))
+})
+
 export async function register(req: Request, res: Response) {
     const parsed = reportSchema.parse({ ...req.body, user: req.body.user ? JSON.parse(req.body.user) : undefined })
     const files = req.files as Express.Multer.File[]
@@ -109,7 +117,7 @@ export async function addNgoMidia(req: Request, res: Response) {
 }
 
 export async function edit(req: Request, res: Response) {
-    const parsed = reportSchema.parse({ ...req.body, user: req.body.user ? JSON.parse(req.body.user) : undefined })
+    const parsed = editReportSchema.parse({ ...req.body, user: req.body.user ? JSON.parse(req.body.user) : undefined })
     const files = req.files as Express.Multer.File[]
 
     const { id } = req.params
@@ -125,6 +133,8 @@ export async function edit(req: Request, res: Response) {
         url: `/images/${file.filename}`,
     }))
 
+    const removedMidia = await reportServices.findRemovableMidia(Number(id), parsed.removedMidia)
+
     const data: Prisma.ReportUpdateInput = {
         description: parsed.description,
         details: parsed.details,
@@ -137,7 +147,8 @@ export async function edit(req: Request, res: Response) {
                 extension: file.extension,
                 url: file.url,
 
-            }))
+            })),
+            deleteMany: { id: { in: removedMidia.map(item => item.id) } }
         },
         status: 'PENDING'
     }
@@ -145,6 +156,7 @@ export async function edit(req: Request, res: Response) {
     const report = await reportServices.edit(Number(id), data)
 
     if (!report) return res.status(500).json({ code: "INTERNAL SERVER ERROR" })
+    reportServices.deleteMidiaFiles(removedMidia)
     res.status(200).json(report)
 }
 
