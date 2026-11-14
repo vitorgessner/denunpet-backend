@@ -169,7 +169,7 @@ export async function exclude(req: Request, res: Response) {
 
     if (!exclude) return res.status(409).json({ code: "CONFLICT" })
 
-return res.status(204).json({ ok: true })
+    return res.status(204).send()
 }
 
 export async function getReportById(req: Request, res: Response) {

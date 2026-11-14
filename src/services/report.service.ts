@@ -148,10 +148,11 @@ function deleteMidiaFiles(midia: Midia[]) {
 async function exclude(id: number) {
     const midia = await reportRepository.findReportMidia(id)
 
-    if (midia && Array.isArray(midia)) deleteMidiaFiles(midia)
-
+    // Primeiro o banco: se a exclusão falhar, os arquivos continuam no disco
     const exclude = await reportRepository.deleteById(id)
     if (!exclude) return false
+
+    deleteMidiaFiles(midia)
 
     return { exclude }
 }
