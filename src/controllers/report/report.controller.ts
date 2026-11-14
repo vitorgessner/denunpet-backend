@@ -1,4 +1,4 @@
-import { Prisma, ReportStatus } from '@prisma/client';
+import { Prisma, ReportStatus, UserType } from '@prisma/client';
 import { Request, Response } from 'express';
 import * as z from 'zod';
 import { reportServices } from '../../services/report.service';
@@ -172,12 +172,20 @@ return res.status(204).json({ ok: true })
 }
 
 export async function getReportById(req: Request, res: Response) {
+    const user = (req as any).user;
+    const userId = Number(user.sub);
     const id = Number(req.params.id);
-    
+
     const report = await reportServices.findById(id);
-    
+
     if (!report) return res.status(404).json({ code: "NOT_FOUND" });
-    
+
+    // Quem pode ver: o denunciante, a ONG responsável ou qualquer ONG enquanto a denúncia está pendente
+    const canView = user.type === UserType.ONG
+        ? report.ngoId === userId || report.status === ReportStatus.PENDING
+        : report.userId === userId;
+    if (!canView) return res.status(403).json({ code: "FORBIDDEN" });
+
     return res.status(200).json(report);
 }
 
