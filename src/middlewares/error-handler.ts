@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import multer from 'multer';
 import { logger } from '../config/logger';
 import { AppError } from '../errors/app-error';
+import { removeUploadedFiles } from './multer';
 import * as z from 'zod';
 
 const SENSITIVE_FIELDS = ['password', 'confirmPassword', 'token'];
@@ -32,6 +33,9 @@ export function errorHandler(
 ) {
   // A stack só vai na resposta quando pedido explicitamente (NODE_ENV=development)
   const isDev = process.env.NODE_ENV === 'development';
+
+  // Se a requisição falhou, os arquivos que o multer já salvou ficariam órfãos no disco
+  removeUploadedFiles(req);
 
   if (error instanceof z.ZodError) {
     return res.status(400).json({
