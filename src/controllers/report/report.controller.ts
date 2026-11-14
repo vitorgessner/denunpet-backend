@@ -230,7 +230,7 @@ export async function getReportById(req: Request, res: Response) {
     const user = getAuthUser(req);
     const id = getReportId(req);
 
-    const report = await reportServices.findById(id);
+    const report = await reportServices.findByIdFor(id, user);
 
     if (!report) throw new AppError("NOT_FOUND", 404);
     if (!reportServices.canView(report, user)) throw new AppError("FORBIDDEN", 403);

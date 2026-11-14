@@ -43,6 +43,14 @@ async function editIfStatus(id: number, status: ReportStatus, data: Prisma.Repor
     return count > 0;
 }
 
+// Telefone e e-mail dos denunciantes. Só deve ser usado para a ONG responsável pela denúncia.
+async function findReporterContacts(userIds: number[]) {
+    return prisma.user.findMany({
+        where: { id: { in: userIds } },
+        select: { id: true, name: true, email: true, phone: true },
+    });
+}
+
 async function findReportMidia(id: number): Promise<Midia[]> {
     return prisma.midia.findMany({ where: { reportId: id } });
 }
@@ -58,6 +66,7 @@ export const reportRepository = {
     findById,
     edit,
     editIfStatus,
+    findReporterContacts,
     findReportMidia,
     deleteById
 };

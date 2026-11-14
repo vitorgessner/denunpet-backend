@@ -17,6 +17,26 @@ type ReportFilters = {
 // Status em que a ONG responsável ainda pode trabalhar na denúncia
 const ACTIVE_STATUSES: ReportStatus[] = [ReportStatus.UNDER_REVIEW, ReportStatus.IN_PROGRESS];
 
+// As consultas devolvem só id e nome do denunciante. A ONG responsável pela denúncia
+// também recebe telefone e e-mail, para poder entrar em contato.
+// Denúncia anônima não tem autor, então nunca expõe contato.
+async function withReporterContact<T extends ReportWithRelations>(reports: T[], viewer: AuthUser): Promise<T[]> {
+    if (viewer.type !== UserType.ONG) return reports;
+
+    const userIds = reports
+        .filter(report => report.ngoId === viewer.id && report.userId !== null)
+        .map(report => report.userId as number);
+    if (!userIds.length) return reports;
+
+    const contacts = await reportRepository.findReporterContacts(Array.from(new Set(userIds)));
+    const contactById = new Map(contacts.map(contact => [contact.id, contact]));
+
+    return reports.map(report => {
+        const contact = report.ngoId === viewer.id && report.userId !== null ? contactById.get(report.userId) : undefined;
+        return contact ? { ...report, user: contact } : report;
+    });
+}
+
 async function register(input: Prisma.ReportCreateInput) {
     const report = await reportRepository.create({
         ...input,
@@ -73,7 +93,7 @@ async function addNgoMidia(id: number, ngoUserId: number, files: Express.Multer.
     if (!files.length) throw new AppError("NO_FILES", 400);
 
     // Se algo falhar aqui, o error handler apaga os arquivos que o multer salvou
-    return reportRepository.edit(report.id, {
+    const updated = await reportRepository.edit(report.id, {
         midia: {
             create: files.map((file) => ({
                 type: "image",
@@ -83,12 +103,18 @@ async function addNgoMidia(id: number, ngoUserId: number, files: Express.Multer.
             }))
         }
     });
+
+    const [withContact] = await withReporterContact([updated], { id: ngoUserId, type: UserType.ONG });
+    return withContact;
 }
 
 async function updateStatus(id: number, ngoUserId: number, status: ReportStatus, statusComment: string) {
     const report = await findActiveNgoReport(id, ngoUserId);
 
-    return reportRepository.edit(report.id, { status, statusComment });
+    const updated = await reportRepository.edit(report.id, { status, statusComment });
+
+    const [withContact] = await withReporterContact([updated], { id: ngoUserId, type: UserType.ONG });
+    return withContact;
 }
 
 async function findByUser(id: number, userType: UserType, filters: ReportFilters) {
@@ -115,13 +141,22 @@ async function findByUser(id: number, userType: UserType, filters: ReportFilters
     }
 
     const reports = await reportRepository.findMany(where);
-    return { reports }
+    return { reports: await withReporterContact(reports, { id, type: userType }) }
 }
 
 async function findById(id: number) {
     const report = await reportRepository.findById(id)
     if (!report) return null
     return report
+}
+
+// Versão de findById para devolver na API: inclui o contato se quem pede é a ONG responsável
+async function findByIdFor(id: number, viewer: AuthUser) {
+    const report = await reportRepository.findById(id)
+    if (!report) return null
+
+    const [withContact] = await withReporterContact([report], viewer);
+    return withContact
 }
 
 // Quem pode ver uma denúncia: o denunciante, a ONG responsável
@@ -177,6 +212,7 @@ export const reportServices = {
     updateStatus,
     findByUser,
     findById,
+    findByIdFor,
     canView,
     edit,
     findRemovableMidia,
