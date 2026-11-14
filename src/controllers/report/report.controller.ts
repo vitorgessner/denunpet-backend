@@ -181,20 +181,32 @@ export async function getReportById(req: Request, res: Response) {
     return res.status(200).json(report);
 }
 
+// Status que a ONG responsável pode definir pelo andamento da denúncia
+const NGO_STATUSES: ReportStatus[] = [ReportStatus.IN_PROGRESS, ReportStatus.RESOLVED, ReportStatus.UNRESOLVED];
+
 export async function updateReportStatus(req: Request, res: Response) {
+    const userId = Number((req as any).user.sub);
     const id = Number(req.params.id);
     const { status, statusComment } = req.body;
-    
-    if (!Object.values(ReportStatus).includes(status)) {
+
+    if (!NGO_STATUSES.includes(status)) {
         return res.status(400).json({ code: "INVALID_STATUS" });
     }
-    
+    if (typeof statusComment !== 'string' || !statusComment.trim()) {
+        return res.status(400).json({ code: "VALIDATION_ERROR" });
+    }
+
     const report = await reportServices.findById(id);
     if (!report) return res.status(404).json({ code: "NOT_FOUND" });
-    
+    // Só a ONG responsável altera, e só enquanto a denúncia está em triagem ou em andamento
+    if (report.ngoId !== userId) return res.status(403).json({ code: "FORBIDDEN" });
+    if (report.status !== ReportStatus.UNDER_REVIEW && report.status !== ReportStatus.IN_PROGRESS) {
+        return res.status(422).json({ code: "REPORT_STATUS_NEED_BE_UNDER_REVIEW_OR_IN_PROGRESS" });
+    }
+
     const updatedReport = await reportServices.edit(id, { status, statusComment });
-    
+
     if (!updatedReport) return res.status(500).json({ code: "INTERNAL_ERROR" });
-    
+
     return res.status(200).json(updatedReport);
 }
