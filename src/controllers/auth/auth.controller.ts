@@ -4,20 +4,46 @@ import { userService } from '../../services/user.service';
 import { UserType } from '@prisma/client';
 import * as z from 'zod';
 
-const registerSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(6),
-  name: z.string().min(1),
-  phone: z.string().optional(),
-  cpf: z.string().optional().nullable(),
-  cnpj: z.string().optional().nullable(),
-  type: z.enum([UserType.USER, UserType.ONG]),
+const CPF_REGEX = /^\d{3}\.\d{3}\.\d{3}-\d{2}$/;
+const CNPJ_REGEX = /^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$/;
+
+const loginSchema = z.object({
+  email: z.string().min(1).max(254),
+  password: z.string().min(1).max(72),
 });
 
-export async function login(req: Request, res: Response) {
-  const { email, password } = req.body;
+const registerSchema = z
+  .object({
+    email: z.string().email().max(254),
+    // bcrypt ignora tudo depois de 72 bytes
+    password: z.string().min(6).max(72),
+    name: z.string().trim().min(1).max(150),
+    phone: z.string().max(20).optional(),
+    cpf: z.string().regex(CPF_REGEX).optional().nullable(),
+    cnpj: z.string().regex(CNPJ_REGEX).optional().nullable(),
+    type: z.enum([UserType.USER, UserType.ONG]),
+  })
+  .refine((data) => data.type !== UserType.USER || !!data.cpf, {
+    message: 'CPF é obrigatório para usuários',
+    path: ['cpf'],
+  })
+  .refine((data) => data.type !== UserType.ONG || !!data.cnpj, {
+    message: 'CNPJ é obrigatório para organizações',
+    path: ['cnpj'],
+  })
+  // Cada tipo de conta guarda apenas o seu documento
+  .transform((data) => ({
+    ...data,
+    phone: data.phone || undefined,
+    cpf: data.type === UserType.USER ? data.cpf : null,
+    cnpj: data.type === UserType.ONG ? data.cnpj : null,
+  }));
 
-  const token = email && password && (await userService.login(email, password));
+export async function login(req: Request, res: Response) {
+  const parsed = loginSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(401).json({ code: 'INVALID_CREDENTIALS' });
+
+  const token = await userService.login(parsed.data.email, parsed.data.password);
 
   if (!token) return res.status(401).json({ code: 'INVALID_CREDENTIALS' });
 
@@ -34,7 +60,7 @@ export async function register(req: Request, res: Response) {
 }
 
 export async function getLoggedUser(req: Request, res: Response) {
-  const userId = (req as any).user.sub;
+  const userId = Number((req as any).user.sub);
 
   const user = await userRepository.findById(userId);
 
