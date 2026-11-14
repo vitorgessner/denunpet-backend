@@ -117,6 +117,8 @@ export async function edit(req: Request, res: Response) {
 
     const exists = await reportServices.findById(Number(id))
     if (!exists) return res.status(404).json({ code: "NOT_FOUND " })
+    // Só o próprio denunciante edita a denúncia
+    if (exists.userId !== Number((req as any).user.sub)) return res.status(403).json({ code: "FORBIDDEN" })
     if (exists.status !== ReportStatus.PENDING && exists.status !== ReportStatus.REJECTED) return res.status(403).json({ code: "FORBIDDEN" })
 
 
@@ -158,6 +160,8 @@ export async function exclude(req: Request, res: Response) {
     const report = await reportServices.findById(id);
 
     if (!report) return res.status(404).json({ code: "NOT_FOUND " })
+    // Só o próprio denunciante exclui a denúncia
+    if (report.userId !== Number((req as any).user.sub)) return res.status(403).json({ code: "FORBIDDEN" })
     if (report.status !== ReportStatus.PENDING) return res.status(403).json({ code: "FORBIDDEN" })
 
     const exclude = await reportServices.exclude(id)
