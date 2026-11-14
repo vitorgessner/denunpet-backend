@@ -3,6 +3,7 @@ import { userRepository } from '../../repositories/user.repository';
 import { userService } from '../../services/user.service';
 import { UserType } from '@prisma/client';
 import * as z from 'zod';
+import { isValidCnpj, isValidCpf } from '../../utils/document';
 
 const CPF_REGEX = /^\d{3}\.\d{3}\.\d{3}-\d{2}$/;
 const CNPJ_REGEX = /^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$/;
@@ -19,8 +20,8 @@ const registerSchema = z
     password: z.string().min(6).max(72),
     name: z.string().trim().min(1).max(150),
     phone: z.string().max(20).optional(),
-    cpf: z.string().regex(CPF_REGEX).optional().nullable(),
-    cnpj: z.string().regex(CNPJ_REGEX).optional().nullable(),
+    cpf: z.string().regex(CPF_REGEX).refine(isValidCpf, { message: 'CPF inválido' }).optional().nullable(),
+    cnpj: z.string().regex(CNPJ_REGEX).refine(isValidCnpj, { message: 'CNPJ inválido' }).optional().nullable(),
     type: z.enum([UserType.USER, UserType.ONG]),
   })
   .refine((data) => data.type !== UserType.USER || !!data.cpf, {

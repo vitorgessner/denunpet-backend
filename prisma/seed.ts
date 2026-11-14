@@ -24,7 +24,7 @@ async function main() {
       name: "João Silva",
       password: hashedPassword,
       phone: "(47) 99999-8888",
-      cpf: "123.456.789-00",
+      cpf: "529.982.247-25",
       type: UserType.USER,
     },
   });
@@ -35,7 +35,7 @@ async function main() {
       name: "ONG Amigos dos Animais",
       password: hashedPassword,
       phone: "(47) 88888-7777",
-      cnpj: "12.345.678/0001-90",
+      cnpj: "11.222.333/0001-81",
       type: UserType.ONG,
     },
   });
@@ -46,7 +46,7 @@ async function main() {
       name: "ONG Patas Felizes",
       password: hashedPassword,
       phone: "(47) 77777-6666",
-      cnpj: "98.765.432/0001-10",
+      cnpj: "11.444.777/0001-61",
       type: UserType.ONG,
     },
   });
