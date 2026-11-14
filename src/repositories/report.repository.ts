@@ -19,7 +19,8 @@ async function create(data: Prisma.ReportCreateInput): Promise<Report> {
 async function findMany(where: Prisma.ReportWhereInput): Promise<Report[] | null> {
     return prisma.report.findMany({
         where,
-        include: reportInclude
+        include: reportInclude,
+        orderBy: { createdAt: 'desc' }
     })
 }
 
