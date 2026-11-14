@@ -11,7 +11,7 @@ router.get('/my', authenticated(), getMyReports);
 router.get('/pending', authenticated(UserType.ONG), getPendingReports);
 router.post("/register", upload.array("midia", 10), register)
 router.get('/:id', authenticated(), getReportById);
-router.put("/:id", upload.array("midia", 10), authenticated(UserType.USER), edit)
+router.put("/:id", authenticated(UserType.USER), upload.array("midia", 10), edit)
 router.put("/:id/send-to-review", authenticated(UserType.ONG), sendReportToReview);
 router.put("/:id/reject", authenticated(UserType.ONG), rejectReport)
 router.put("/:id/status", authenticated(UserType.ONG), updateReportStatus);
