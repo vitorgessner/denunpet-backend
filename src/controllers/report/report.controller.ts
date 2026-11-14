@@ -199,7 +199,9 @@ export async function edit(req: Request, res: Response) {
             create: midiaData,
             deleteMany: { id: { in: removedMidia.map(item => item.id) } }
         },
-        status: 'PENDING'
+        // Ao reenviar uma denúncia rejeitada ela volta para a fila sem o motivo da rejeição anterior
+        status: 'PENDING',
+        rejectReason: null
     }
 
     const report = await reportServices.edit(id, data)
