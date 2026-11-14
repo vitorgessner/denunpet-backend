@@ -3,14 +3,6 @@ import { Request, Response } from 'express';
 import * as z from 'zod';
 import { reportServices } from '../../services/report.service';
 
-const userSchema = z.object({
-    id: z.number(),
-    name: z.string(),
-    email: z.email(),
-    type: z.string()
-})
-
-
 const reportSchema = z.object({
     description: z.string().min(1),
     details: z.string().min(1),
@@ -18,8 +10,7 @@ const reportSchema = z.object({
     location: z.string().min(1),
     address: z.string().nullable(),
     houseNumber: z.string().optional(),
-    anonymous: z.string(),
-    user: userSchema.optional()
+    anonymous: z.string()
 })
 
 // Na edição o campo anonymous não é usado; removedMidia é um JSON com os ids das mídias a remover
@@ -31,7 +22,9 @@ const editReportSchema = reportSchema.extend({
 })
 
 export async function register(req: Request, res: Response) {
-    const parsed = reportSchema.parse({ ...req.body, user: req.body.user ? JSON.parse(req.body.user) : undefined })
+    // O autor vem sempre do token, nunca do corpo da requisição
+    const userId = Number((req as any).user.sub)
+    const parsed = reportSchema.parse(req.body)
     const files = req.files as Express.Multer.File[]
 
     const midiaData = files.map((file) => ({
@@ -48,7 +41,7 @@ export async function register(req: Request, res: Response) {
         houseNumber: parsed.houseNumber || null,
         ocurrenceDate: parsed.ocurrenceDate,
         status: ReportStatus.PENDING,
-        user: parsed.anonymous === 'true' ? undefined : parsed.user ? { connect: { id: parsed.user.id } } : undefined,
+        user: parsed.anonymous === 'true' ? undefined : { connect: { id: userId } },
         midia: {
             create: midiaData.map(file => ({
                 type: file.type,
@@ -117,7 +110,7 @@ export async function addNgoMidia(req: Request, res: Response) {
 }
 
 export async function edit(req: Request, res: Response) {
-    const parsed = editReportSchema.parse({ ...req.body, user: req.body.user ? JSON.parse(req.body.user) : undefined })
+    const parsed = editReportSchema.parse(req.body)
     const files = req.files as Express.Multer.File[]
 
     const { id } = req.params

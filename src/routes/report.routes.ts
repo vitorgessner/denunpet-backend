@@ -9,7 +9,7 @@ const router = Router();
 
 router.get('/my', authenticated(), getMyReports);
 router.get('/pending', authenticated(UserType.ONG), getPendingReports);
-router.post("/register", upload.array("midia", 10), register)
+router.post("/register", authenticated(UserType.USER), upload.array("midia", 10), register)
 router.get('/:id', authenticated(), getReportById);
 router.put("/:id", authenticated(UserType.USER), upload.array("midia", 10), edit)
 router.put("/:id/send-to-review", authenticated(UserType.ONG), sendReportToReview);
