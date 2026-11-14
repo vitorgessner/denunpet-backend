@@ -25,28 +25,24 @@ async function getPendingReports() {
 async function sendReportToReview(id: number, ngoUserId: number) {
     const report = await reportRepository.findById(id);
     if (!report) throw new AppError("REPORT_NOT_FOUND", 404);
-    if (report.status != ReportStatus.PENDING) throw new AppError("REPORT_STATUS_NEED_BE_PENDING");
 
-    await reportRepository.edit(report.id, {
+    const updated = await reportRepository.editIfStatus(id, ReportStatus.PENDING, {
         status: ReportStatus.UNDER_REVIEW,
-        ngo: { connect: { id: ngoUserId } },
+        ngoId: ngoUserId,
         rejectReason: null,
     });
-
-    return;
+    if (!updated) throw new AppError("REPORT_STATUS_NEED_BE_PENDING");
 }
 
 async function rejectReport(id: number, ngoUserId: number, reason: string) {
     const report = await reportRepository.findById(id);
     if (!report) throw new AppError("REPORT_NOT_FOUND", 404);
-    if (report.status != ReportStatus.PENDING) throw new AppError("REPORT_STATUS_NEED_BE_PENDING");
 
-    await reportRepository.edit(report.id, {
+    const updated = await reportRepository.editIfStatus(id, ReportStatus.PENDING, {
         status: ReportStatus.REJECTED,
         rejectReason: reason,
     });
-
-    return;
+    if (!updated) throw new AppError("REPORT_STATUS_NEED_BE_PENDING");
 }
 
 async function addNgoMidia(id: number, ngoUserId: number, files: Express.Multer.File[]) {

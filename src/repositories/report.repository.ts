@@ -1,4 +1,4 @@
-import { Midia, Prisma, Report } from "@prisma/client";
+import { Midia, Prisma, Report, ReportStatus } from "@prisma/client";
 import { prisma } from '../config/prisma';
 
 // Dados do usuário que podem sair na API. Nunca usar `user: true`/`ngo: true`:
@@ -41,6 +41,13 @@ async function edit(id: number, data: Prisma.ReportUpdateInput): Promise<Report>
     return prisma.report.update({ where: { id }, data })
 }
 
+// Atualiza somente se a denúncia ainda estiver no status esperado (operação atômica).
+// Evita que duas ONGs assumam/rejeitem a mesma denúncia ao mesmo tempo.
+async function editIfStatus(id: number, status: ReportStatus, data: Prisma.ReportUncheckedUpdateManyInput): Promise<boolean> {
+    const { count } = await prisma.report.updateMany({ where: { id, status }, data });
+    return count > 0;
+}
+
 async function findReportMidia(id: number): Promise<Midia[]> {
     return prisma.midia.findMany({ where: { reportId: id } });
 }
@@ -56,6 +63,7 @@ export const reportRepository = {
     findByUser,
     findById,
     edit,
+    editIfStatus,
     findReportMidia,
     deleteById
 };
