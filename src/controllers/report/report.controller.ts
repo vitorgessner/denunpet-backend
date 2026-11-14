@@ -2,6 +2,7 @@ import { Prisma, ReportStatus, UserType } from '@prisma/client';
 import { Request, Response } from 'express';
 import * as z from 'zod';
 import { reportServices } from '../../services/report.service';
+import { AppError } from '../../errors/app-error';
 
 const reportSchema = z.object({
     description: z.string().min(1),
@@ -32,6 +33,11 @@ export async function register(req: Request, res: Response) {
         extension: file.originalname.split(".").pop()!,
         url: `/images/${file.filename}`,
     }))
+
+    // Toda denúncia precisa de pelo menos uma foto e um vídeo
+    if (!midiaData.some((file) => file.type === "image") || !midiaData.some((file) => file.type === "video")) {
+        throw new AppError("IMAGE_AND_VIDEO_REQUIRED", 400);
+    }
 
     const data: Prisma.ReportCreateInput = {
         description: parsed.description,
