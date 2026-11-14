@@ -8,14 +8,15 @@ import { isValidCnpj, isValidCpf } from '../../utils/document';
 const CPF_REGEX = /^\d{3}\.\d{3}\.\d{3}-\d{2}$/;
 const CNPJ_REGEX = /^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$/;
 
+// E-mail sempre em minúsculas: Joao@x.com e joao@x.com são a mesma conta
 const loginSchema = z.object({
-  email: z.string().min(1).max(254),
+  email: z.string().trim().toLowerCase().min(1).max(254),
   password: z.string().min(1).max(72),
 });
 
 const registerSchema = z
   .object({
-    email: z.string().email().max(254),
+    email: z.string().trim().toLowerCase().email().max(254),
     // bcrypt ignora tudo depois de 72 bytes
     password: z.string().min(6).max(72),
     name: z.string().trim().min(1).max(150),
