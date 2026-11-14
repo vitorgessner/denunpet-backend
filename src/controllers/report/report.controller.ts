@@ -134,6 +134,7 @@ export async function edit(req: Request, res: Response) {
         description: parsed.description,
         details: parsed.details,
         location: parsed.location,
+        address: parsed.address,
         houseNumber: parsed.houseNumber || null,
         ocurrenceDate: parsed.ocurrenceDate,
         midia: {
