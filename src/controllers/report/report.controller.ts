@@ -79,6 +79,13 @@ function getReportId(req: Request) {
     return id;
 }
 
+type MidiaKind = { type: string }
+
+// Toda denúncia precisa de pelo menos uma foto e um vídeo
+function hasImageAndVideo(midia: MidiaKind[]) {
+    return midia.some((item) => item.type === "image") && midia.some((item) => item.type === "video");
+}
+
 function getMidiaData(req: Request) {
     const files = (req.files as Express.Multer.File[] | undefined) ?? [];
 
@@ -95,9 +102,7 @@ export async function register(req: Request, res: Response) {
     const parsed = reportSchema.parse(req.body)
     const midiaData = getMidiaData(req)
 
-    if (!midiaData.some((file) => file.type === "image") || !midiaData.some((file) => file.type === "video")) {
-        throw new AppError("IMAGE_AND_VIDEO_REQUIRED", 400);
-    }
+    if (!hasImageAndVideo(midiaData)) throw new AppError("IMAGE_AND_VIDEO_REQUIRED", 400);
 
     const data: Prisma.ReportCreateInput = {
         description: parsed.description,
@@ -177,6 +182,11 @@ export async function edit(req: Request, res: Response) {
 
     const midiaData = getMidiaData(req)
     const removedMidia = await reportServices.findRemovableMidia(id, parsed.removedMidia)
+
+    // A denúncia não pode ficar sem foto ou sem vídeo depois da edição
+    const removedIds = new Set(removedMidia.map(item => item.id))
+    const remainingMidia = exists.midia.filter(item => !item.addedByNgo && !removedIds.has(item.id))
+    if (!hasImageAndVideo([...remainingMidia, ...midiaData])) throw new AppError("IMAGE_AND_VIDEO_REQUIRED", 400)
 
     const data: Prisma.ReportUpdateInput = {
         description: parsed.description,
