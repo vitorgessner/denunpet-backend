@@ -206,7 +206,8 @@ export async function exclude(req: Request, res: Response) {
     if (!report) throw new AppError("NOT_FOUND", 404)
     // Só o próprio denunciante exclui a denúncia
     if (report.userId !== user.id) throw new AppError("FORBIDDEN", 403)
-    if (report.status !== ReportStatus.PENDING) throw new AppError("FORBIDDEN", 403)
+    // Pendente ou rejeitada: depois que uma ONG assume, a denúncia não pode mais ser excluída
+    if (report.status !== ReportStatus.PENDING && report.status !== ReportStatus.REJECTED) throw new AppError("FORBIDDEN", 403)
 
     await reportServices.exclude(id)
 
