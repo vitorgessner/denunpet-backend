@@ -6,7 +6,7 @@ import { UserType } from '@prisma/client';
 
 const router = Router();
 
-
+// A autenticação sempre vem antes do upload: requisição não autorizada não grava arquivo em disco
 router.get('/my', authenticated(), getMyReports);
 router.get('/pending', authenticated(UserType.ONG), getPendingReports);
 router.post("/register", authenticated(UserType.USER), upload.array("midia", 10), register)
@@ -17,5 +17,5 @@ router.put("/:id/reject", authenticated(UserType.ONG), rejectReport)
 router.put("/:id/status", authenticated(UserType.ONG), updateReportStatus);
 router.post("/:id/midia", authenticated(UserType.ONG), uploadImages.array("midia", 10), addNgoMidia);
 router.delete("/:id", authenticated(UserType.USER), exclude)
-    
+
 export default router;
