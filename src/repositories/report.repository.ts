@@ -1,6 +1,16 @@
 import { Midia, Prisma, Report } from "@prisma/client";
 import { prisma } from '../config/prisma';
 
+// Dados do usuário que podem sair na API. Nunca usar `user: true`/`ngo: true`:
+// isso devolve o registro inteiro (hash da senha, CPF/CNPJ, e-mail, telefone).
+const publicUser = { select: { id: true, name: true } } as const;
+
+const reportInclude = {
+    midia: true,
+    user: publicUser,
+    ngo: publicUser,
+} satisfies Prisma.ReportInclude;
+
 
 async function create(data: Prisma.ReportCreateInput): Promise<Report> {
     return prisma.report.create({ data });
@@ -9,33 +19,21 @@ async function create(data: Prisma.ReportCreateInput): Promise<Report> {
 async function findMany(where: Prisma.ReportWhereInput): Promise<Report[] | null> {
     return prisma.report.findMany({
         where,
-        include: { 
-            midia: true,
-            user: true,
-            ngo: true
-        }
+        include: reportInclude
     })
 }
 
 async function findByUser(id: number): Promise<Report[] | null> {
     return prisma.report.findMany({
         where: { userId: id },
-        include: { 
-            midia: true,
-            user: true,
-            ngo: true
-        }
+        include: reportInclude
     })
 }
 
 async function findById(id: number): Promise<Report | null> {
     return prisma.report.findUnique({
         where: { id: id },
-        include: { 
-            midia: true,
-            user: true,
-            ngo: true
-        }
+        include: reportInclude
     })
 }
 
