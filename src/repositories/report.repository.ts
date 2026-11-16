@@ -21,7 +21,9 @@ async function findMany(where: Prisma.ReportWhereInput): Promise<ReportWithRelat
     return prisma.report.findMany({
         where,
         include: reportInclude,
-        orderBy: { createdAt: 'desc' },
+        // O id desempata denúncias criadas no mesmo instante: sem ele a ordem mudava a cada
+        // atualização e o card trocava de lugar na lista (o que fecha o detalhe aberto na tela)
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     })
 }
 
