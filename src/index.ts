@@ -6,6 +6,8 @@ import reportRouter from './routes/report.routes';
 import { errorHandler } from './middlewares/error-handler';
 import path from "path";
 
+const port = Number(process.env.PORT) || 3001
+
 const app = express();
 
 app.use(cors({
@@ -21,6 +23,10 @@ app.use('/api/report', reportRouter);
 
 app.use(errorHandler);
 
-const server = app.listen(3001, () => {
-  console.log(`Server ready at: http://localhost:3001`);
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok' });
+});
+
+const server = app.listen(port, '0.0.0.0', () => {
+  console.log(`Server ready at: http://localhost:${port}`);
 });
