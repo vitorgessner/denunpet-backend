@@ -9,6 +9,14 @@ async function findByEmail(email: string): Promise<User | null> {
   return prisma.user.findUnique({ where: { email } });
 }
 
+async function findByCpf(cpf: string): Promise<User | null> {
+  return prisma.user.findUnique({ where: { cpf } });
+}
+
+async function findByCnpj(cnpj: string): Promise<User | null> {
+  return prisma.user.findUnique({ where: { cnpj } });
+}
+
 async function create(data: Prisma.UserCreateInput): Promise<User> {
   return prisma.user.create({ data });
 }
@@ -16,5 +24,7 @@ async function create(data: Prisma.UserCreateInput): Promise<User> {
 export const userRepository = {
   findById,
   findByEmail,
+  findByCpf,
+  findByCnpj,
   create,
 };

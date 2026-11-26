@@ -26,14 +26,32 @@ async function register(input: Prisma.UserCreateInput) {
   const existing = await userRepository.findByEmail(input.email);
   if (existing) throw new AppError('EMAIL_ALREADY_REGISTERED');
 
+  if (input.cpf && (await userRepository.findByCpf(input.cpf))) {
+    throw new AppError('CPF_ALREADY_REGISTERED');
+  }
+  if (input.cnpj && (await userRepository.findByCnpj(input.cnpj))) {
+    throw new AppError('CNPJ_ALREADY_REGISTERED');
+  }
+
   const passwordHash = await hashPassword(input.password);
 
-  const user = await userRepository.create({
-    ...input,
-    password: passwordHash,
-  });
+  try {
+    const user = await userRepository.create({
+      ...input,
+      password: passwordHash,
+    });
 
-  return { user };
+    return { user };
+  } catch (error) {
+    // Dois cadastros simultâneos com o mesmo e-mail/documento passam pelas checagens acima
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      const target = String(error.meta?.target ?? '');
+      if (target.includes('cpf')) throw new AppError('CPF_ALREADY_REGISTERED');
+      if (target.includes('cnpj')) throw new AppError('CNPJ_ALREADY_REGISTERED');
+      throw new AppError('EMAIL_ALREADY_REGISTERED');
+    }
+    throw error;
+  }
 }
 
 export const userService = {

@@ -1,51 +1,120 @@
-import { Prisma, ReportStatus } from '@prisma/client';
+import { Prisma, ReportStatus, UserType } from '@prisma/client';
 import { Request, Response } from 'express';
 import * as z from 'zod';
 import { reportServices } from '../../services/report.service';
+import { AppError } from '../../errors/app-error';
+import { getMidiaExtension, getMidiaType } from '../../middlewares/multer';
 
-const userSchema = z.object({
-    id: z.number(),
-    name: z.string(),
-    email: z.email(),
-    type: z.string()
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
+// A localização é salva como "latitude, longitude"
+function isValidLocation(value: string) {
+    const parts = value.split(',').map((part) => part.trim());
+    if (parts.length !== 2 || parts.some((part) => part === '')) return false;
+
+    const [lat, lng] = parts.map(Number);
+    return Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
+}
+
+const emptyToUndefined = (value: unknown) => (value === '' ? undefined : value);
+
+const baseReportSchema = z.object({
+    description: z.string().trim().min(1).max(500),
+    details: z.string().trim().min(1).max(5000),
+    ocurrenceDate: z.coerce.date()
+        // 1 dia de folga por causa de fuso horário
+        .refine((date) => date.getTime() <= Date.now() + ONE_DAY_MS, { message: 'A data de ocorrência não pode ser no futuro' }),
+    location: z.string().min(1).max(100),
+    address: z.string().max(500).optional().nullable(),
+    houseNumber: z.string().trim().max(20).optional(),
 })
 
-
-const reportSchema = z.object({
-    description: z.string().min(1),
-    details: z.string().min(1),
-    ocurrenceDate: z.string().transform((string) => new Date(string)),
-    location: z.string().min(1),
-    address: z.string().nullable(),
-    anonymous: z.string(),
-    user: userSchema.optional()
+// O autor da denúncia vem sempre do token, nunca do corpo da requisição
+const reportSchema = baseReportSchema.extend({
+    location: baseReportSchema.shape.location.refine(isValidLocation, { message: 'Localização inválida' }),
+    anonymous: z.string().optional(),
 })
 
-export async function register(req: Request, res: Response) {
-    const parsed = reportSchema.parse({ ...req.body, user: req.body.user ? JSON.parse(req.body.user) : undefined })
-    const files = req.files as Express.Multer.File[]
+// removedMidia é um JSON com os ids das mídias a remover
+const editReportSchema = baseReportSchema.extend({
+    removedMidia: z.string().optional()
+        .transform((string, ctx) => {
+            if (!string) return []
+            try {
+                return JSON.parse(string)
+            } catch {
+                ctx.addIssue({ code: 'custom', message: 'JSON inválido' })
+                return z.NEVER
+            }
+        })
+        .pipe(z.array(z.number().int()).max(100))
+})
 
-    const midiaData = files.map((file) => ({
-        type: file.mimetype.startsWith("image") ? "image" : "video",
-        extension: file.originalname.split(".").pop()!,
+const filtersSchema = z.object({
+    status: z.preprocess(emptyToUndefined, z.enum(ReportStatus).optional()),
+    search: z.preprocess(emptyToUndefined, z.string().trim().max(200).optional()),
+    dateFrom: z.preprocess(emptyToUndefined, z.coerce.date().optional()),
+    dateTo: z.preprocess(emptyToUndefined, z.coerce.date().optional()),
+})
+
+const rejectSchema = z.object({
+    reason: z.string().trim().min(1).max(1000),
+})
+
+// Status que a ONG responsável pode definir pelo andamento da denúncia
+const NGO_STATUSES: ReportStatus[] = [ReportStatus.IN_PROGRESS, ReportStatus.RESOLVED, ReportStatus.UNRESOLVED];
+
+const statusSchema = z.object({
+    statusComment: z.string().trim().min(1).max(2000),
+})
+
+function getAuthUser(req: Request) {
+    const { sub, type } = (req as any).user;
+    return { id: Number(sub), type: type as UserType };
+}
+
+function getReportId(req: Request) {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) throw new AppError("INVALID_ID", 400);
+    return id;
+}
+
+type MidiaKind = { type: string }
+
+// Toda denúncia precisa de pelo menos uma foto e um vídeo
+function hasImageAndVideo(midia: MidiaKind[]) {
+    return midia.some((item) => item.type === "image") && midia.some((item) => item.type === "video");
+}
+
+function getMidiaData(req: Request) {
+    const files = (req.files as Express.Multer.File[] | undefined) ?? [];
+
+    // Tipo e extensão vêm do nome gerado pelo servidor (extensão validada no upload)
+    return files.map((file) => ({
+        type: getMidiaType(file.filename),
+        extension: getMidiaExtension(file.filename),
         url: `/images/${file.filename}`,
     }))
+}
+
+export async function register(req: Request, res: Response) {
+    const user = getAuthUser(req);
+    const parsed = reportSchema.parse(req.body)
+    const midiaData = getMidiaData(req)
+
+    if (!hasImageAndVideo(midiaData)) throw new AppError("IMAGE_AND_VIDEO_REQUIRED", 400);
 
     const data: Prisma.ReportCreateInput = {
         description: parsed.description,
         details: parsed.details,
         location: parsed.location,
-        address: parsed.address,
+        address: parsed.address || null,
+        houseNumber: parsed.houseNumber || null,
         ocurrenceDate: parsed.ocurrenceDate,
         status: ReportStatus.PENDING,
-        user: parsed.anonymous === 'true' ? undefined : parsed.user ? { connect: { id: parsed.user.id } } : undefined,
+        user: parsed.anonymous === 'true' ? undefined : { connect: { id: user.id } },
         midia: {
-            create: midiaData.map(file => ({
-                type: file.type,
-                extension: file.extension,
-                url: file.url,
-
-            }))
+            create: midiaData
         },
     }
 
@@ -58,19 +127,10 @@ export async function register(req: Request, res: Response) {
 }
 
 export async function getMyReports(req: Request, res: Response) {
-    const userId = Number((req as any).user.sub)
-    const userType = (req as any).user.type;
-    
-    const { status, search, dateFrom, dateTo } = req.query;
+    const user = getAuthUser(req);
+    const filters = filtersSchema.parse(req.query);
 
-    const reports = await reportServices.findByUser(userId, userType, {
-        status: status as string,
-        search: search as string,
-        dateFrom: dateFrom as string,
-        dateTo: dateTo as string
-    })
-
-    if (!reports) return res.status(404).json({ code: "NOT_FOUND" })
+    const reports = await reportServices.findByUser(user.id, user.type, filters)
 
     res.status(200).json(reports)
 }
@@ -81,99 +141,114 @@ export async function getPendingReports(req: Request, res: Response) {
 }
 
 export async function sendReportToReview(req: Request, res: Response) {
-    const userId = +(req as any).user.sub;
-    const reportId = +req.params.id;
+    const user = getAuthUser(req);
+    const reportId = getReportId(req);
 
-    await reportServices.sendReportToReview(reportId, userId);
+    await reportServices.sendReportToReview(reportId, user.id);
     return res.status(200).send();
 }
 
 export async function rejectReport(req: Request, res: Response) {
-    const userId = +(req as any).user.sub;
-    const reportId = +req.params.id;
-    const reason = req.body.reason;
+    const reportId = getReportId(req);
+    const { reason } = rejectSchema.parse(req.body);
 
-    await reportServices.rejectReport(reportId, userId, reason);
+    await reportServices.rejectReport(reportId, reason);
     return res.status(200).send();
 }
 
+export async function addNgoMidia(req: Request, res: Response) {
+    const user = getAuthUser(req);
+    const reportId = getReportId(req);
+    const files = (req.files as Express.Multer.File[] | undefined) ?? [];
+
+    const report = await reportServices.addNgoMidia(reportId, user.id, files);
+    return res.status(201).json(report);
+}
+
 export async function edit(req: Request, res: Response) {
-    const parsed = reportSchema.parse({ ...req.body, user: req.body.user ? JSON.parse(req.body.user) : undefined })
-    const files = req.files as Express.Multer.File[]
+    const user = getAuthUser(req);
+    const id = getReportId(req);
+    const parsed = editReportSchema.parse(req.body)
 
-    const { id } = req.params
+    const exists = await reportServices.findById(id)
+    if (!exists) throw new AppError("NOT_FOUND", 404)
+    // Só o próprio denunciante edita a denúncia
+    if (exists.userId !== user.id) throw new AppError("FORBIDDEN", 403)
+    if (exists.status !== ReportStatus.PENDING && exists.status !== ReportStatus.REJECTED) throw new AppError("FORBIDDEN", 403)
+    // Denúncias antigas podem ter um texto livre na localização; só valida se ela foi alterada
+    if (parsed.location !== exists.location && !isValidLocation(parsed.location)) {
+        throw new AppError("INVALID_LOCATION", 400)
+    }
 
-    const exists = await reportServices.findById(Number(id))
-    if (!exists) return res.status(404).json({ code: "NOT_FOUND " })
-    if (exists.status !== ReportStatus.PENDING && exists.status !== ReportStatus.REJECTED) return res.status(403).json({ code: "FORBIDDEN" })
+    const midiaData = getMidiaData(req)
+    const removedMidia = await reportServices.findRemovableMidia(id, parsed.removedMidia)
 
-
-    const midiaData = files.map((file) => ({
-        type: file.mimetype.startsWith("image") ? "image" : "video",
-        extension: file.originalname.split(".").pop()!,
-        url: `/images/${file.filename}`,
-    }))
+    // A denúncia não pode ficar sem foto ou sem vídeo depois da edição
+    const removedIds = new Set(removedMidia.map(item => item.id))
+    const remainingMidia = exists.midia.filter(item => !item.addedByNgo && !removedIds.has(item.id))
+    if (!hasImageAndVideo([...remainingMidia, ...midiaData])) throw new AppError("IMAGE_AND_VIDEO_REQUIRED", 400)
 
     const data: Prisma.ReportUpdateInput = {
         description: parsed.description,
         details: parsed.details,
         location: parsed.location,
+        address: parsed.address || null,
+        houseNumber: parsed.houseNumber || null,
         ocurrenceDate: parsed.ocurrenceDate,
         midia: {
-            create: midiaData.map(file => ({
-                type: file.type,
-                extension: file.extension,
-                url: file.url,
-
-            }))
+            create: midiaData,
+            deleteMany: { id: { in: removedMidia.map(item => item.id) } }
         },
-        status: 'PENDING'
+        // Ao reenviar uma denúncia rejeitada ela volta para a fila sem o motivo da rejeição anterior
+        status: 'PENDING',
+        rejectReason: null
     }
 
-    const report = await reportServices.edit(Number(id), data)
+    const report = await reportServices.edit(id, data)
 
-    if (!report) return res.status(500).json({ code: "INTERNAL SERVER ERROR" })
+    reportServices.deleteMidiaFiles(removedMidia)
     res.status(200).json(report)
 }
 
 export async function exclude(req: Request, res: Response) {
-    const id = Number(req.params.id)
+    const user = getAuthUser(req);
+    const id = getReportId(req)
     const report = await reportServices.findById(id);
 
-    if (!report) return res.status(404).json({ code: "NOT_FOUND " })
-    if (report.status !== ReportStatus.PENDING) return res.status(403).json({ code: "FORBIDDEN" })
+    if (!report) throw new AppError("NOT_FOUND", 404)
+    // Só o próprio denunciante exclui a denúncia
+    if (report.userId !== user.id) throw new AppError("FORBIDDEN", 403)
+    // Pendente ou rejeitada: depois que uma ONG assume, a denúncia não pode mais ser excluída
+    if (report.status !== ReportStatus.PENDING && report.status !== ReportStatus.REJECTED) throw new AppError("FORBIDDEN", 403)
 
-    const exclude = await reportServices.exclude(id)
+    await reportServices.exclude(id)
 
-    if (!exclude) return res.status(409).json({ code: "CONFLICT" })
-
-return res.status(204).json({ ok: true })
+    return res.status(204).send()
 }
 
 export async function getReportById(req: Request, res: Response) {
-    const id = Number(req.params.id);
-    
-    const report = await reportServices.findById(id);
-    
-    if (!report) return res.status(404).json({ code: "NOT_FOUND" });
-    
+    const user = getAuthUser(req);
+    const id = getReportId(req);
+
+    const report = await reportServices.findByIdFor(id, user);
+
+    if (!report) throw new AppError("NOT_FOUND", 404);
+    if (!reportServices.canView(report, user)) throw new AppError("FORBIDDEN", 403);
+
     return res.status(200).json(report);
 }
 
 export async function updateReportStatus(req: Request, res: Response) {
-    const id = Number(req.params.id);
-    const { status, statusComment } = req.body;
-    
-    if (!Object.values(ReportStatus).includes(status)) {
-        return res.status(400).json({ code: "INVALID_STATUS" });
+    const user = getAuthUser(req);
+    const id = getReportId(req);
+    const status = req.body?.status;
+
+    if (!NGO_STATUSES.includes(status)) {
+        throw new AppError("INVALID_STATUS", 400);
     }
-    
-    const report = await reportServices.findById(id);
-    if (!report) return res.status(404).json({ code: "NOT_FOUND" });
-    
-    const updatedReport = await reportServices.edit(id, { status, statusComment });
-    
-    if (!updatedReport) return res.status(500).json({ code: "INTERNAL_ERROR" });
-    
+    const { statusComment } = statusSchema.parse(req.body);
+
+    const updatedReport = await reportServices.updateStatus(id, user.id, status, statusComment);
+
     return res.status(200).json(updatedReport);
 }

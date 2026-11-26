@@ -7,10 +7,12 @@ export function authenticated(userType?: UserType) {
     const header = req.headers.authorization;
     if (!header) return res.status(401).send();
 
-    const token = header.split(' ')[1];
+    const [scheme, token] = header.split(' ');
+    if (scheme !== 'Bearer' || !token) return res.status(401).send();
+
     const payload = jwt.verify(token);
 
-    if (!payload) {
+    if (!payload || !Number.isInteger(Number(payload.sub))) {
       return res.status(401).send();
     }
     if (userType && payload?.type !== userType) {
